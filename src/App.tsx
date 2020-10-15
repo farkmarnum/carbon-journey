@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-empty-function */
 import React, { useState, useEffect, useRef } from 'react'
 import './App.css'
 import {
@@ -27,7 +28,7 @@ const GRAVITY = -50
 const DICE_SIDELENGTH = 4
 const BOX_LENGTH = 10
 const DICE_MASS = 5
-const TARGET_DISTANCE = 6
+const TARGET_DISTANCE = 10
 
 extend({ OrbitControls })
 
@@ -116,6 +117,8 @@ const Cube = ({
   readyState: string
   setReadyState: (state: string) => void
 }): JSX.Element => {
+  const previousReadyState = useRef(readyState)
+
   const { camera } = useThree()
 
   const {
@@ -139,53 +142,74 @@ const Cube = ({
     setApi(api)
   }, [setApi, api])
 
-  const velocity = useRef(new Vector3())
-  const rotation = useRef(new Euler())
+  const rotation = useRef([0, 0, 0])
 
-  useFrame(() => {
-    api.velocity.copy(velocity.current)
-    api.rotation.copy(velocity.current)
+  const unsubVel = useRef(() => {})
+  const unsubRot = useRef(() => {})
 
-    console.log(velocity)
-  })
+  useEffect(() => {
+    if (typeof unsubVel.current === 'function') unsubVel.current()
+    if (typeof unsubRot.current === 'function') unsubRot.current()
+
+    unsubVel.current = (api.velocity.subscribe((v) => {
+      if (
+        readyState === 'init' &&
+        (Math.abs(v[0]) > 0.1 || Math.abs(v[1]) > 0.1 || Math.abs(v[2]) > 0.1)
+      ) {
+        setReadyState('in-motion')
+      }
+      if (
+        readyState === 'in-motion' &&
+        Math.abs(v[0]) < 0.1 &&
+        Math.abs(v[1]) < 0.1 &&
+        Math.abs(v[2]) < 0.1
+      ) {
+        setReadyState('stopped')
+      }
+    }) as unknown) as () => void
+
+    unsubRot.current = (api.rotation.subscribe((r) => {
+      rotation.current = r
+    }) as unknown) as () => void
+  }, [readyState, setReadyState, api.rotation, api.velocity])
 
   const positionSpringEnd = useRef<Vector3>(new Vector3())
   const rotationSpringEnd = useRef<Euler>(new Euler())
 
-  if (
-    readyState === 'init' && velocity.current?.length() > 0
-  ) {
-    console.log('SETTING MOTION')
-    setReadyState('in-motion')
-  }
-  if (
-    readyState === 'in-motion' && velocity.current?.length() < 0.5
-  ) {
-    console.log('SETTING sTOPPEd')
-    setReadyState('stopped')
-  }
+  useEffect(() => {
+    console.log(rotation.current)
+  })
 
-  if (readyState === 'stopped') {
-    setReadyState('animating')
+  useEffect(() => {
+    if (
+      readyState === 'stopped' &&
+      previousReadyState.current === 'in-motion'
+    ) {
+      const targetPosition = new Vector3(0, 0, -TARGET_DISTANCE)
+      targetPosition.applyQuaternion(camera.quaternion)
+      targetPosition.add(camera.position)
 
-    const targetPosition = new Vector3(0, 0, -TARGET_DISTANCE)
-    targetPosition.applyQuaternion(camera.quaternion)
-    targetPosition.add(camera.position)
+      const currentCubeRot = new Vector3(
+        rotation.current[0],
+        rotation.current[1],
+        rotation.current[2],
+      )
+      const currentCameraRot = camera.rotation.toVector3()
 
-    const currentCubeRot = rotation.current.toVector3()
-    const currentCameraRot = camera.rotation.toVector3()
+      const qrot = new Quaternion()
+      qrot.setFromUnitVectors(
+        currentCubeRot.normalize(),
+        currentCameraRot.normalize(),
+      )
 
-    const qrot = new Quaternion()
-    qrot.setFromUnitVectors(
-      currentCubeRot.normalize(),
-      currentCameraRot.normalize(),
-    )
+      const rot = new Euler()
 
-    const rot = new Euler()
+      positionSpringEnd.current = targetPosition
+      rotationSpringEnd.current = rot.setFromQuaternion(qrot)
+    }
 
-    positionSpringEnd.current = targetPosition
-    rotationSpringEnd.current = rot.setFromQuaternion(qrot)
-  }
+    previousReadyState.current = readyState
+  }, [readyState, previousReadyState, camera])
 
   interface SpringProps {
     posX: number
@@ -206,7 +230,7 @@ const Cube = ({
       rotZ: rotationSpringEnd.current.z,
     },
     onFrame: ({ posX, posY, posZ, rotX, rotY, rotZ }: SpringProps) => {
-      if (readyState === 'animating') {
+      if (readyState === 'stopped') {
         api.position.set(posX, posY, posZ)
         api.rotation.set(rotX, rotY, rotZ)
         api.mass?.set(0)
