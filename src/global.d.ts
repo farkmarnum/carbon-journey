@@ -15,3 +15,5 @@ declare global {
     typeof Mesh
   >
 }
+
+declare module 'react-spring/three'

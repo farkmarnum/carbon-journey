@@ -117,22 +117,22 @@ const Cube = ({
   readyState: string
   setReadyState: (state: string) => void
 }): JSX.Element => {
-  const previousReadyState = useRef(readyState)
+  const readyStateDelayed = useRef(readyState)
 
   const { camera } = useThree()
 
   const {
     velocity: initVelocity,
-    angularVelocity,
     rotation: initRotation,
-    position,
+    position: initPosition,
+    angularVelocity,
   } = generatePhysicsProps()
 
   const [ref, api] = useBox(() => ({
     mass: DICE_MASS,
     material,
     args: [DICE_SIDELENGTH, DICE_SIDELENGTH, DICE_SIDELENGTH],
-    position: [position.x, position.y, position.z],
+    position: [initPosition.x, initPosition.y, initPosition.z],
     rotation: [initRotation.x, initRotation.y, initRotation.z],
     velocity: [initVelocity.x, initVelocity.y, initVelocity.z],
     angularVelocity: [angularVelocity.x, angularVelocity.y, angularVelocity.z],
@@ -142,98 +142,118 @@ const Cube = ({
     setApi(api)
   }, [setApi, api])
 
+  const position = useRef([0, 0, 0])
   const rotation = useRef([0, 0, 0])
+  const velocity = useRef([0, 0, 0])
 
-  const unsubVel = useRef(() => {})
-  const unsubRot = useRef(() => {})
+  const startPosition = useRef(new Vector3())
+  const startRotation = useRef(new Euler())
+  const springPosition = useRef(new Vector3())
+  const springRotation = useRef(new Euler())
 
   useEffect(() => {
-    if (typeof unsubVel.current === 'function') unsubVel.current()
-    if (typeof unsubRot.current === 'function') unsubRot.current()
+    api.velocity.subscribe((v) => {
+      velocity.current = v
+    })
 
-    unsubVel.current = (api.velocity.subscribe((v) => {
-      if (
-        readyState === 'init' &&
-        (Math.abs(v[0]) > 0.1 || Math.abs(v[1]) > 0.1 || Math.abs(v[2]) > 0.1)
-      ) {
-        setReadyState('in-motion')
-      }
-      if (
-        readyState === 'in-motion' &&
-        Math.abs(v[0]) < 0.1 &&
-        Math.abs(v[1]) < 0.1 &&
-        Math.abs(v[2]) < 0.1
-      ) {
-        setReadyState('stopped')
-      }
-    }) as unknown) as () => void
-
-    unsubRot.current = (api.rotation.subscribe((r) => {
+    api.rotation.subscribe((r) => {
       rotation.current = r
-    }) as unknown) as () => void
-  }, [readyState, setReadyState, api.rotation, api.velocity])
+    })
 
-  const positionSpringEnd = useRef<Vector3>(new Vector3())
-  const rotationSpringEnd = useRef<Euler>(new Euler())
+    api.position.subscribe((p) => {
+      position.current = p
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  useEffect(() => {
-    console.log(rotation.current)
+  useFrame(() => {
+    if (
+      readyState === 'init' &&
+      (Math.abs(velocity.current[0]) > 0.1 ||
+        Math.abs(velocity.current[1]) > 0.1 ||
+        Math.abs(velocity.current[2]) > 0.1)
+    ) {
+      setReadyState('in-motion')
+    }
+    if (
+      readyState === 'in-motion' &&
+      Math.abs(velocity.current[0]) < 0.1 &&
+      Math.abs(velocity.current[1]) < 0.1 &&
+      Math.abs(velocity.current[2]) < 0.1
+    ) {
+      setReadyState('stopped')
+    }
   })
 
-  useEffect(() => {
-    if (
-      readyState === 'stopped' &&
-      previousReadyState.current === 'in-motion'
-    ) {
-      const targetPosition = new Vector3(0, 0, -TARGET_DISTANCE)
-      targetPosition.applyQuaternion(camera.quaternion)
-      targetPosition.add(camera.position)
+  if (readyState === 'stopped' && readyStateDelayed.current !== 'stopped') {
+    console.log('CALL')
+    const targetPosition = new Vector3(0, 0, -TARGET_DISTANCE)
+    targetPosition.applyQuaternion(camera.quaternion)
+    targetPosition.add(camera.position)
 
-      const currentCubeRot = new Vector3(
-        rotation.current[0],
-        rotation.current[1],
-        rotation.current[2],
-      )
-      const currentCameraRot = camera.rotation.toVector3()
+    const currentCubeRot = new Vector3(
+      rotation.current[0],
+      rotation.current[1],
+      rotation.current[2],
+    )
+    const currentCameraRot = camera.rotation.toVector3()
 
-      const qrot = new Quaternion()
-      qrot.setFromUnitVectors(
-        currentCubeRot.normalize(),
-        currentCameraRot.normalize(),
-      )
+    const qrot = new Quaternion()
+    qrot.setFromUnitVectors(
+      currentCubeRot.normalize(),
+      currentCameraRot.normalize(),
+    )
 
-      const rot = new Euler()
+    const rot = new Euler()
+    const targetRotation = rot.setFromQuaternion(qrot)
 
-      positionSpringEnd.current = targetPosition
-      rotationSpringEnd.current = rot.setFromQuaternion(qrot)
-    }
+    startPosition.current = new Vector3(position.current[0], position.current[1], position.current[2])
+    startRotation.current = new Euler(rotation.current[0], rotation.current[1], rotation.current[2])
 
-    previousReadyState.current = readyState
-  }, [readyState, previousReadyState, camera])
+    springPosition.current = targetPosition
+    springRotation.current = targetRotation
+
+    console.log(startPosition.current, springPosition.current)
+  }
+
+  readyStateDelayed.current = readyState
+
+  const isAnimating = readyState === 'stopped'
 
   interface SpringProps {
-    posX: number
-    posY: number
-    posZ: number
-    rotX: number
-    rotY: number
-    rotZ: number
+    position: number[]
+    rotation: number[]
   }
 
   useSpring({
-    to: {
-      posX: positionSpringEnd.current.x,
-      posY: positionSpringEnd.current.y,
-      posZ: positionSpringEnd.current.z,
-      rotX: rotationSpringEnd.current.x,
-      rotY: rotationSpringEnd.current.y,
-      rotZ: rotationSpringEnd.current.z,
+    from: {
+      position: [
+        startPosition.current.x,
+        startPosition.current.y,
+        startPosition.current.z,
+      ],
+      rotation: [
+        startRotation.current.x,
+        startRotation.current.y,
+        startRotation.current.z,
+      ],
     },
-    onFrame: ({ posX, posY, posZ, rotX, rotY, rotZ }: SpringProps) => {
-      if (readyState === 'stopped') {
-        api.position.set(posX, posY, posZ)
-        api.rotation.set(rotX, rotY, rotZ)
-        api.mass?.set(0)
+    to: {
+      position: [
+        springPosition.current.x,
+        springPosition.current.y,
+        springPosition.current.z,
+      ],
+      rotation: [
+        springRotation.current.x,
+        springRotation.current.y,
+        springRotation.current.z,
+      ],
+    },
+    onFrame: (sp: SpringProps): void => {
+      if (isAnimating) {
+        api.position.set(sp.position[0], sp.position[1], sp.position[2])
+        api.rotation.set(sp.rotation[0], sp.rotation[1], sp.rotation[2])
       }
     },
   })
