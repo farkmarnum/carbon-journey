@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import './App.css'
 import {
   Vector3,
+  Quaternion,
   Euler,
   CubeTextureLoader,
   TextureLoader,
@@ -25,6 +26,8 @@ import atmoWater from './assets/cubeAtmosphere/atmo-water.png'
 const GRAVITY = -50
 const DICE_SIDELENGTH = 4
 const BOX_LENGTH = 10
+const DICE_MASS = 5
+const TARGET_DISTANCE = 6
 
 extend({ OrbitControls })
 
@@ -71,7 +74,7 @@ const CameraControls = (): JSX.Element => {
   )
 }
 
-const range = (n: number): number[] => Array.from({ length: n }, (x, i) => i)
+// const range = (n: number): number[] => Array.from({ length: n }, (x, i) => i)
 const rand = (k: number): number => (Math.random() - 0.5) * 2 * k
 const randPlusMinusOne = (): 1 | -1 => (Math.random() > 0.5 ? 1 : -1)
 
@@ -98,46 +101,118 @@ const generatePhysicsProps = (): PhysicsProps => ({
 })
 
 type ApiType = Api[1]
-type SetApiType = (id: string, api: ApiType) => void
-type ApisType = Record<string, ApiType>
 
 const material = {
   friction: 0.1,
   restitution: 0.3,
 }
 
-const WALL_ARGS = [BOX_LENGTH * 2, BOX_LENGTH * 2, 0.1, 100, 100, 10]
-const MESH_WALL_ARGS = WALL_ARGS as [
-  number | number | number | number | number | number,
-]
-
 const Cube = ({
-  id,
   setApi,
+  readyState,
+  setReadyState,
 }: {
-  id: string
-  setApi: SetApiType
+  setApi: (api: ApiType) => void
+  readyState: string
+  setReadyState: (state: string) => void
 }): JSX.Element => {
+  const { camera } = useThree()
+
   const {
-    velocity,
+    velocity: initVelocity,
     angularVelocity,
-    rotation,
+    rotation: initRotation,
     position,
   } = generatePhysicsProps()
 
   const [ref, api] = useBox(() => ({
-    mass: 5,
+    mass: DICE_MASS,
     material,
     args: [DICE_SIDELENGTH, DICE_SIDELENGTH, DICE_SIDELENGTH],
     position: [position.x, position.y, position.z],
-    rotation: [rotation.x, rotation.y, rotation.z],
-    velocity: [velocity.x, velocity.y, velocity.z],
+    rotation: [initRotation.x, initRotation.y, initRotation.z],
+    velocity: [initVelocity.x, initVelocity.y, initVelocity.z],
     angularVelocity: [angularVelocity.x, angularVelocity.y, angularVelocity.z],
   }))
 
   useEffect(() => {
-    setApi(id, api)
-  }, [id, setApi, api])
+    setApi(api)
+  }, [setApi, api])
+
+  const velocity = useRef(new Vector3())
+  const rotation = useRef(new Euler())
+
+  useFrame(() => {
+    api.velocity.copy(velocity.current)
+    api.rotation.copy(velocity.current)
+
+    console.log(velocity)
+  })
+
+  const positionSpringEnd = useRef<Vector3>(new Vector3())
+  const rotationSpringEnd = useRef<Euler>(new Euler())
+
+  if (
+    readyState === 'init' && velocity.current?.length() > 0
+  ) {
+    console.log('SETTING MOTION')
+    setReadyState('in-motion')
+  }
+  if (
+    readyState === 'in-motion' && velocity.current?.length() < 0.5
+  ) {
+    console.log('SETTING sTOPPEd')
+    setReadyState('stopped')
+  }
+
+  if (readyState === 'stopped') {
+    setReadyState('animating')
+
+    const targetPosition = new Vector3(0, 0, -TARGET_DISTANCE)
+    targetPosition.applyQuaternion(camera.quaternion)
+    targetPosition.add(camera.position)
+
+    const currentCubeRot = rotation.current.toVector3()
+    const currentCameraRot = camera.rotation.toVector3()
+
+    const qrot = new Quaternion()
+    qrot.setFromUnitVectors(
+      currentCubeRot.normalize(),
+      currentCameraRot.normalize(),
+    )
+
+    const rot = new Euler()
+
+    positionSpringEnd.current = targetPosition
+    rotationSpringEnd.current = rot.setFromQuaternion(qrot)
+  }
+
+  interface SpringProps {
+    posX: number
+    posY: number
+    posZ: number
+    rotX: number
+    rotY: number
+    rotZ: number
+  }
+
+  useSpring({
+    to: {
+      posX: positionSpringEnd.current.x,
+      posY: positionSpringEnd.current.y,
+      posZ: positionSpringEnd.current.z,
+      rotX: rotationSpringEnd.current.x,
+      rotY: rotationSpringEnd.current.y,
+      rotZ: rotationSpringEnd.current.z,
+    },
+    onFrame: ({ posX, posY, posZ, rotX, rotY, rotZ }: SpringProps) => {
+      if (readyState === 'animating') {
+        api.position.set(posX, posY, posZ)
+        api.rotation.set(rotX, rotY, rotZ)
+        api.mass?.set(0)
+      }
+    },
+  })
 
   return (
     <mesh receiveShadow castShadow ref={ref}>
@@ -154,6 +229,11 @@ const Cube = ({
     </mesh>
   )
 }
+
+const WALL_ARGS = [BOX_LENGTH * 2, BOX_LENGTH * 2, 0.1, 100, 100, 10]
+const MESH_WALL_ARGS = WALL_ARGS as [
+  number | number | number | number | number | number,
+]
 
 const Planes = (): JSX.Element => {
   const [groundRef] = usePlane(() => ({
@@ -258,68 +338,13 @@ const Planes = (): JSX.Element => {
   )
 }
 
-interface SpringProps {
-  position: Vector3
-  rotation: Euler
-}
-
-const BoxInFrontOfCam = (): JSX.Element => {
-  const targetDistance = 6
-
-  const { camera } = useThree()
-  const meshRef = useRef<meshType>()
-
-  const positionSpringEnd = useRef<Vector3>(new Vector3())
-  const rotationSpringEnd = useRef<Euler>(new Euler())
-
-  let isAnimating = false
-
-  useFrame(() => {
-    if (!isAnimating && meshRef.current?.velocity && meshRef.current?.velocity.length() < 0.01) {
-      const targetPosition = new Vector3(0, 0, -targetDistance)
-      targetPosition.applyQuaternion(camera.quaternion)
-      targetPosition.add(camera.position)
-      const targetRotation = camera.rotation
-
-      positionSpringEnd.current = targetPosition
-      rotationSpringEnd.current = targetRotation
-      isAnimating = true
-    }
-  })
-
-  const props = useSpring({
-    posX: positionSpringEnd.current.x,
-    posY: positionSpringEnd.current.y,
-    posZ: positionSpringEnd.current.z,
-    rotX: rotationSpringEnd.current.x,
-    rotY: rotationSpringEnd.current.y,
-    rotZ: rotationSpringEnd.current.z,
-  })
-
-  useFrame(() => {
-    if (isAnimating) {
-      if (meshRef.current) {
-        meshRef.current.position = [props.posX, props.posY, props.posZ]
-        meshRef.current.rotation = [props.rotX, props.rotY, props.rotZ]
-      }
-    }
-  })
-
-  return (
-    <mesh ref={meshRef}>
-      <boxBufferGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="hotpink" />
-    </mesh>
-  )
-}
-
 const Scene = (props: {
-  numberOfDice: number
-  setApi: SetApiType
+  setApi: (api: ApiType) => void
+  cubeState: string
+  setCubeState: (state: string) => void
 }): JSX.Element => {
   return (
     <>
-      <BoxInFrontOfCam />
       <CameraControls />
       <ambientLight />
       <pointLight
@@ -331,9 +356,11 @@ const Scene = (props: {
         shadow-radius={10}
       />
       <Physics gravity={[0, GRAVITY, 0]}>
-        {range(props.numberOfDice).map((_, i) => (
-          <Cube key={i} id={String(i)} setApi={props.setApi} />
-        ))}
+        <Cube
+          setApi={props.setApi}
+          readyState={props.cubeState}
+          setReadyState={props.setCubeState}
+        />
         <Planes />
       </Physics>
     </>
@@ -341,32 +368,28 @@ const Scene = (props: {
 }
 
 const App = (): JSX.Element => {
-  const [apis, setApis] = useState<ApisType>({})
-  const setApi = (id: string, api: ApiType): void => {
-    setApis((apisCurrent) => ({
-      ...apisCurrent,
-      [id]: api,
-    }))
-  }
+  const [api, setApi] = useState<ApiType>()
+  const [cubeState, setCubeState] = useState('init')
 
   const rollDice = (): void => {
-    Object.values(apis).forEach((api): void => {
-      const {
-        velocity,
-        angularVelocity,
-        rotation,
-        position,
-      } = generatePhysicsProps()
+    const {
+      velocity,
+      angularVelocity,
+      rotation,
+      position,
+    } = generatePhysicsProps()
 
-      api.position.set(position.x, position.y, position.z)
-      api.rotation.set(rotation.x, rotation.y, rotation.z)
-      api.velocity.set(velocity.x, velocity.y, velocity.z)
-      api.angularVelocity.set(
-        angularVelocity.x,
-        angularVelocity.y,
-        angularVelocity.z,
-      )
-    })
+    api?.position.set(position.x, position.y, position.z)
+    api?.rotation.set(rotation.x, rotation.y, rotation.z)
+    api?.velocity.set(velocity.x, velocity.y, velocity.z)
+    api?.angularVelocity.set(
+      angularVelocity.x,
+      angularVelocity.y,
+      angularVelocity.z,
+    )
+    api?.mass?.set(DICE_MASS)
+
+    setCubeState('init')
   }
 
   return (
@@ -376,7 +399,11 @@ const App = (): JSX.Element => {
         camera={{ position: [0, 15, 15], rotation: [-0.15, 0, 0] }}
         shadowMap
       >
-        <Scene setApi={setApi} numberOfDice={1} />
+        <Scene
+          setApi={setApi}
+          cubeState={cubeState}
+          setCubeState={setCubeState}
+        />
       </Canvas>
       <button className="roll-btn" onClick={(): void => rollDice()}>
         Roll Again
