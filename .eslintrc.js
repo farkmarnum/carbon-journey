@@ -1,30 +1,32 @@
 module.exports = {
-  "env": {
-    "browser": false,
-    "es6": true,
-    "node": true
-  },
   "parser": "@typescript-eslint/parser",
+  "extends": [
+    "eslint:recommended",
+    "plugin:jest/recommended",
+    "plugin:@typescript-eslint/eslint-recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:react/recommended",
+    "prettier",
+    "prettier/react",
+    "prettier/@typescript-eslint"
+  ],
+  "plugins": [
+    "@typescript-eslint",
+    "jest",
+    "react",
+    "react-hooks",
+    "prettier"
+  ],
   "parserOptions": {
     project: './tsconfig.json',
     tsconfigRootDir: __dirname,
     "sourceType": "module"
   },
-  "plugins": [
-    "@typescript-eslint",
-    "jest",
-    "react-hooks",
-    "prettier"
-  ],
-  "extends": [
-    "eslint:recommended",
-    "plugin:@typescript-eslint/eslint-recommended",
-    "plugin:@typescript-eslint/recommended",
-    "plugin:jest/recommended",
-    "prettier",
-    "prettier/react",
-    "prettier/@typescript-eslint"
-  ],
+  "env": {
+    "browser": false,
+    "es6": true,
+    "node": true
+  },
   "rules": {
     "no-console": [
       "error",
@@ -53,5 +55,10 @@ module.exports = {
       }
     ],
     "prettier/prettier": "error"
-  }
+  },
+  "settings": {
+    "react": {
+      "version": "detect",
+    },
+  },
 }

@@ -9,4 +9,6 @@ declare global {
       >
     }
   }
+
+  type meshType = ReactThreeFiber.Object3DNode<Mesh<Geometry | BufferGeometry, Material | Material[]>, typeof Mesh>
 }

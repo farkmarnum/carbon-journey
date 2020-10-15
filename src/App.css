@@ -1,3 +1,27 @@
 .App {
   text-align: center;
 }
+
+:root {
+  --blue: #118ab2;
+}
+
+.roll-btn {
+  position: fixed;
+  bottom: 50%;
+  right: 4rem;
+  background: none;
+  outline: none;
+  padding: 2rem;
+  border-radius: 1rem;
+  border: 3px solid var(--blue);
+  color: var(--blue);
+  font-size: 1.5rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.roll-btn:hover {
+  background: var(--blue);
+  color: white;
+}
