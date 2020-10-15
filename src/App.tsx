@@ -3,11 +3,13 @@ import React, { useState, useEffect, useRef } from 'react'
 import './App.css'
 import {
   Vector3,
-  Quaternion,
+  Matrix4,
   Euler,
   CubeTextureLoader,
   TextureLoader,
   DoubleSide,
+  Texture,
+  Geometry,
 } from 'three'
 import { Physics, usePlane, useBox, Api } from 'use-cannon'
 import {
@@ -23,11 +25,19 @@ import atmoPlant from './assets/cubeAtmosphere/atmo-plant.png'
 import atmoStay from './assets/cubeAtmosphere/atmo-stay.png'
 import atmoWater from './assets/cubeAtmosphere/atmo-water.png'
 
+const NORMALS = [
+  [1, 0, 0],
+  [-1, 0, 0],
+  [0, 1, 0],
+  [0, -1, 0],
+  [0, 0, 1],
+  [0, 0, -1],
+]
+
 const GRAVITY = -50
 const DICE_SIDELENGTH = 4
 const BOX_LENGTH = 10
 const DICE_MASS = 5
-const TARGET_DISTANCE = 10
 
 extend({ OrbitControls })
 
@@ -43,9 +53,20 @@ const landscapeTexture = cubeLoader.load([
   require('./assets/landscapeTexture/nz.png'),
 ])
 
-const atmoPlantTexture = textureLoader.load(atmoPlant)
-const atmoStayTexture = textureLoader.load(atmoStay)
-const atmoWaterTexture = textureLoader.load(atmoWater)
+const atmosphereCubeFaces = [
+  atmoPlant,
+  atmoStay,
+  atmoWater,
+  atmoPlant,
+  atmoStay,
+  atmoWater,
+]
+
+const atmosphereCubeTexture = atmosphereCubeFaces.map((face) =>
+  textureLoader.load(face),
+)
+
+// console.log(atmosphereCubeFaces, atmosphereCubeTexture)
 
 type orbitControlsType = ReactThreeFiber.Object3DNode<
   OrbitControls,
@@ -74,29 +95,27 @@ const CameraControls = (): JSX.Element => {
   )
 }
 
-// const range = (n: number): number[] => Array.from({ length: n }, (x, i) => i)
 const rand = (k: number): number => (Math.random() - 0.5) * 2 * k
 const randPlusMinusOne = (): 1 | -1 => (Math.random() > 0.5 ? 1 : -1)
+const areNear = (a: number, b: number): boolean => Math.abs(a - b) < Math.PI / 4
 
 interface PhysicsProps {
   angularVelocity: Vector3
   velocity: Vector3
-  rotation: Vector3
   position: Vector3
 }
 
 const generatePhysicsProps = (): PhysicsProps => ({
   angularVelocity: new Vector3(
-    rand(4) * Math.PI,
-    rand(4) * Math.PI,
-    rand(4) * Math.PI,
+    rand(8) * Math.PI,
+    rand(8) * Math.PI,
+    rand(8) * Math.PI,
   ),
   velocity: new Vector3(
     randPlusMinusOne() * ((Math.random() + 1) * 10 + 10),
     (Math.random() + 1) * 3,
     randPlusMinusOne() * ((Math.random() + 1) * 10 + 10),
   ),
-  rotation: new Vector3(rand(Math.PI), rand(Math.PI), rand(Math.PI)),
   position: new Vector3(rand(2) + 2, 10, rand(2) + 2),
 })
 
@@ -111,41 +130,32 @@ const Cube = ({
   setApi,
   readyState,
   setReadyState,
+  textures,
+  showRollResult,
 }: {
   setApi: (api: ApiType) => void
   readyState: string
   setReadyState: (state: string) => void
+  textures: Texture[]
+  showRollResult: (i: number) => void
 }): JSX.Element => {
   const {
     velocity: initVelocity,
-    rotation: initRotation,
     position: initPosition,
     angularVelocity,
   } = generatePhysicsProps()
-
-  let showResult = (): void => {
-    console.warn('Not defined!')
-  }
-
-  let timeout: NodeJS.Timeout
 
   const [ref, api] = useBox(() => ({
     mass: DICE_MASS,
     material,
     args: [DICE_SIDELENGTH, DICE_SIDELENGTH, DICE_SIDELENGTH],
     position: [initPosition.x, initPosition.y, initPosition.z],
-    rotation: [initRotation.x, initRotation.y, initRotation.z],
     velocity: [initVelocity.x, initVelocity.y, initVelocity.z],
     angularVelocity: [angularVelocity.x, angularVelocity.y, angularVelocity.z],
-    onCollide: ({ body }): void => {
-      if (body?.name === 'ground') {
-        if (timeout) clearTimeout(timeout)
-        timeout = setTimeout(showResult, 500)
-      }
-    },
   }))
 
-  const rotation = useRef(new Vector3())
+  const rotation = useRef(new Euler())
+  const velocity = useRef(new Vector3())
 
   useEffect(() => {
     api.rotation.subscribe((v) => {
@@ -153,30 +163,109 @@ const Cube = ({
       rotation.current.y = v[1]
       rotation.current.z = v[2]
     })
+    api.velocity.subscribe((v) => {
+      velocity.current.x = v[0]
+      velocity.current.y = v[1]
+      velocity.current.z = v[2]
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  showResult = (): void => {
-    console.log(rotation.current.x, rotation.current.z)
-  }
+  const [dir, setDir] = useState(new Vector3())
+
+  useFrame(() => {
+    if (readyState === 'init' && velocity.current.length() > 0.1) {
+      setReadyState('in-motion')
+    }
+    if (readyState === 'in-motion' && velocity.current.length() < 0.05 && ref.current?.matrix) {
+      const matrix = new Matrix4()
+      matrix.extractRotation(ref.current?.matrix)
+
+      const normals = [...NORMALS]
+      normals.forEach((normal, i) => {
+        const direction = new Vector3(normal[0], normal[1], normal[2])
+        direction.applyMatrix4(matrix)
+        if (direction.y > 0.9) {
+          console.log([
+            'grey',
+'black',
+'yellow',
+'green',
+'white',
+'purple',
+][i])
+        }
+      })
+
+    //   // const isUpright = ({ y }: { y: number }): boolean =>
+    //   //   Math.abs(1 - y) < 0.05
+
+    //   // if (normals.some(isUpright)) {
+    //   //   setReadyState('stopped')
+    //   //   const i = normals.findIndex(isUpright)
+    //   //   console.log(i)
+    //   //   console.log(normals.map(({ y }) => Math.round(y * 10) / 10))
+    //   // }
+
+    //   console.log(normals.map(n => Math.round(10 * n.dot(direction)) / 10))
+    //   setReadyState('stopped')
+    }
+  })
+
+  // ;(window as Record<string, any>).w = () => setReadyState('in-motion')
+
+  // if (readyState === 'stopped' && ref.current?.matrix) {
+    
+
+  //   console.log(rotation.current)
+
+  //   NORMALS.forEach((normal) => {
+  //     normal.applyEuler(rotation.current)
+  //   })
+
+  //   console.log(normals.map(({ y }) => Math.round(y * 10) / 10))
+  //   // const dots = normals.map((normal) => normal.dot(direction))
+  //   // console.log(dots.map(d => Math.round(d * 10) / 10))
+  // }
 
   useEffect(() => {
     setApi(api)
   }, [setApi, api])
 
   return (
+    <>
+    <mesh>
+      <arrowHelper args={[dir, new Vector3(0, 0, 0), 10]} />
+    </mesh>
     <mesh receiveShadow castShadow ref={ref}>
       <boxBufferGeometry
         attach="geometry"
         args={[DICE_SIDELENGTH, DICE_SIDELENGTH, DICE_SIDELENGTH]}
       />
-      <meshLambertMaterial attachArray="material" color="grey" /> {/*map={atmoPlantTexture} /> */}
-      <meshLambertMaterial attachArray="material" color="black" /> {/*map={atmoStayTexture} /> */}
-      <meshLambertMaterial attachArray="material" color="yellow" /> {/*map={atmoWaterTexture} /> */}
-      <meshLambertMaterial attachArray="material" color="green" /> {/*map={atmoPlantTexture} /> */}
-      <meshLambertMaterial attachArray="material" color="white" /> {/*map={atmoStayTexture} /> */}
-      <meshLambertMaterial attachArray="material" color="purple" /> {/*map={atmoWaterTexture} /> */}
+      <meshLambertMaterial attachArray="material" color="grey" />{' '}
+      {/*map={atmoPlantTexture} /> */}
+      <meshLambertMaterial attachArray="material" color="black" />{' '}
+      {/*map={atmoStayTexture} /> */}
+      <meshLambertMaterial attachArray="material" color="yellow" />{' '}
+      {/*map={atmoWaterTexture} /> */}
+      <meshLambertMaterial attachArray="material" color="green" />{' '}
+      {/*map={atmoPlantTexture} /> */}
+      <meshLambertMaterial attachArray="material" color="white" />{' '}
+      {/*map={atmoStayTexture} /> */}
+      <meshLambertMaterial attachArray="material" color="purple" />{' '}
+      {/*map={atmoWaterTexture} /> */}
+      {/*  */}
+      {/*       {textures.map((texture, i) => { */}
+      {/*         return ( */}
+      {/*           <meshLambertMaterial */}
+      {/*             key={texture.uuid} */}
+      {/*             attachArray="material" */}
+      {/*             map={texture} */}
+      {/*           /> */}
+      {/*         ) */}
+      {/*       })} */}
     </mesh>
+    </>
   )
 }
 
@@ -292,6 +381,8 @@ const Scene = (props: {
   setApi: (api: ApiType) => void
   cubeState: string
   setCubeState: (state: string) => void
+  cubeTexture: Texture[]
+  showRollResult: (i: number) => void
 }): JSX.Element => {
   return (
     <>
@@ -310,6 +401,8 @@ const Scene = (props: {
           setApi={props.setApi}
           readyState={props.cubeState}
           setReadyState={props.setCubeState}
+          textures={props.cubeTexture}
+          showRollResult={props.showRollResult}
         />
         <Planes />
       </Physics>
@@ -320,17 +413,17 @@ const Scene = (props: {
 const App = (): JSX.Element => {
   const [api, setApi] = useState<ApiType>()
   const [cubeState, setCubeState] = useState('init')
+  const showRollResult = (i: number): void => {
+    const colors = ['grey', 'black', 'yellow', 'green', 'white', 'purple']
+    console.log(colors[i])
+    // console.log(atmosphereCubeFaces[i])
+  }
 
   const rollDice = (): void => {
-    const {
-      velocity,
-      angularVelocity,
-      rotation,
-      position,
-    } = generatePhysicsProps()
+    const { velocity, angularVelocity, position } = generatePhysicsProps()
 
     api?.position.set(position.x, position.y, position.z)
-    api?.rotation.set(rotation.x, rotation.y, rotation.z)
+    api?.rotation.set(0, 0, 0)
     api?.velocity.set(velocity.x, velocity.y, velocity.z)
     api?.angularVelocity.set(
       angularVelocity.x,
@@ -353,6 +446,8 @@ const App = (): JSX.Element => {
           setApi={setApi}
           cubeState={cubeState}
           setCubeState={setCubeState}
+          cubeTexture={atmosphereCubeTexture}
+          showRollResult={showRollResult}
         />
       </Canvas>
       <button className="roll-btn" onClick={(): void => rollDice()}>
