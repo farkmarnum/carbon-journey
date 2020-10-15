@@ -116,16 +116,18 @@ const Cube = ({
   readyState: string
   setReadyState: (state: string) => void
 }): JSX.Element => {
-  const readyStateDelayed = useRef(readyState)
-
-  const { camera } = useThree()
-
   const {
     velocity: initVelocity,
     rotation: initRotation,
     position: initPosition,
     angularVelocity,
   } = generatePhysicsProps()
+
+  let showResult = (): void => {
+    console.warn('Not defined!')
+  }
+
+  let timeout: NodeJS.Timeout
 
   const [ref, api] = useBox(() => ({
     mass: DICE_MASS,
@@ -135,125 +137,32 @@ const Cube = ({
     rotation: [initRotation.x, initRotation.y, initRotation.z],
     velocity: [initVelocity.x, initVelocity.y, initVelocity.z],
     angularVelocity: [angularVelocity.x, angularVelocity.y, angularVelocity.z],
+    onCollide: ({ body }): void => {
+      if (body?.name === 'ground') {
+        if (timeout) clearTimeout(timeout)
+        timeout = setTimeout(showResult, 500)
+      }
+    },
   }))
 
-  useEffect(() => {
-    setApi(api)
-  }, [setApi, api])
-
-  const position = useRef([0, 0, 0])
-  const rotation = useRef([0, 0, 0])
-  const velocity = useRef([0, 0, 0])
-
-  const startPosition = useRef(new Vector3())
-  const startRotation = useRef(new Euler())
-  const springPosition = useRef(new Vector3())
-  const springRotation = useRef(new Euler())
-  const startTime = useRef(0)
+  const rotation = useRef(new Vector3())
 
   useEffect(() => {
-    api.velocity.subscribe((v) => {
-      velocity.current = v
-    })
-
-    api.rotation.subscribe((r) => {
-      rotation.current = r
-    })
-
-    api.position.subscribe((p) => {
-      position.current = p
+    api.rotation.subscribe((v) => {
+      rotation.current.x = v[0]
+      rotation.current.y = v[1]
+      rotation.current.z = v[2]
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useFrame(() => {
-    if (
-      readyState === 'init' &&
-      (Math.abs(velocity.current[0]) > 0.1 ||
-        Math.abs(velocity.current[1]) > 0.1 ||
-        Math.abs(velocity.current[2]) > 0.1)
-    ) {
-      setReadyState('in-motion')
-    }
-    if (
-      readyState === 'in-motion' &&
-      Math.abs(velocity.current[0]) < 0.05 &&
-      Math.abs(velocity.current[1]) < 0.05 &&
-      Math.abs(velocity.current[2]) < 0.05
-    ) {
-      setReadyState('stopped')
-    }
-  })
-
-  if (readyState === 'stopped' && readyStateDelayed.current !== 'stopped') {
-    const targetPosition = new Vector3(0, 0, -TARGET_DISTANCE)
-    targetPosition.applyQuaternion(camera.quaternion)
-    targetPosition.add(camera.position)
-
-    const currentCubeRot = new Euler(
-      rotation.current[0],
-      rotation.current[1],
-      rotation.current[2],
-    ).toVector3()
-
-    const currentCameraRot = camera.rotation.toVector3()
-    currentCameraRot.applyAxisAngle(new Vector3(0, 0, 1), Math.PI / 2)
-
-    const qrot = new Quaternion()
-    qrot.setFromUnitVectors(
-      currentCubeRot.normalize(),
-      currentCameraRot.normalize(),
-    )
-
-    const rot = new Euler()
-    const targetRotation = rot.setFromQuaternion(qrot)
-
-    startPosition.current = new Vector3(
-      position.current[0],
-      position.current[1],
-      position.current[2],
-    )
-    startRotation.current = new Euler(
-      rotation.current[0],
-      rotation.current[1],
-      rotation.current[2],
-    )
-
-    springPosition.current = targetPosition
-    springRotation.current = targetRotation
-
-    startTime.current = +new Date()
+  showResult = (): void => {
+    console.log(rotation.current.x, rotation.current.z)
   }
 
-  readyStateDelayed.current = readyState
-
-  const isAnimating = readyState === 'stopped'
-
-  const ANIMATION_LENGTH = 400
-
-  useFrame(() => {
-    const t = Math.min((+new Date() - startTime.current) / ANIMATION_LENGTH, 1)
-
-    if (isAnimating) {
-      api.mass?.set(0)
-      const interpPosition = new Vector3()
-      interpPosition.lerpVectors(
-        startPosition.current,
-        springPosition.current,
-        t,
-      )
-
-      const interpRotation = new Vector3()
-      interpRotation.lerpVectors(
-        startRotation.current.toVector3(),
-        springRotation.current.toVector3(),
-        t,
-      )
-
-      api.position.set(interpPosition.x, interpPosition.y, interpPosition.z)
-      api.rotation.set(interpRotation.x, interpRotation.y, interpRotation.z)
-    }
-  })
+  useEffect(() => {
+    setApi(api)
+  }, [setApi, api])
 
   return (
     <mesh receiveShadow castShadow ref={ref}>
@@ -261,12 +170,12 @@ const Cube = ({
         attach="geometry"
         args={[DICE_SIDELENGTH, DICE_SIDELENGTH, DICE_SIDELENGTH]}
       />
-      <meshLambertMaterial attachArray="material" map={atmoPlantTexture} />
-      <meshLambertMaterial attachArray="material" map={atmoStayTexture} />
-      <meshLambertMaterial attachArray="material" map={atmoWaterTexture} />
-      <meshLambertMaterial attachArray="material" map={atmoPlantTexture} />
-      <meshLambertMaterial attachArray="material" map={atmoStayTexture} />
-      <meshLambertMaterial attachArray="material" map={atmoWaterTexture} />
+      <meshLambertMaterial attachArray="material" color="grey" /> {/*map={atmoPlantTexture} /> */}
+      <meshLambertMaterial attachArray="material" color="black" /> {/*map={atmoStayTexture} /> */}
+      <meshLambertMaterial attachArray="material" color="yellow" /> {/*map={atmoWaterTexture} /> */}
+      <meshLambertMaterial attachArray="material" color="green" /> {/*map={atmoPlantTexture} /> */}
+      <meshLambertMaterial attachArray="material" color="white" /> {/*map={atmoStayTexture} /> */}
+      <meshLambertMaterial attachArray="material" color="purple" /> {/*map={atmoWaterTexture} /> */}
     </mesh>
   )
 }
@@ -315,7 +224,7 @@ const Planes = (): JSX.Element => {
 
   return (
     <>
-      <mesh ref={groundRef} receiveShadow>
+      <mesh ref={groundRef} receiveShadow name="ground">
         <planeBufferGeometry attach="geometry" args={[20, 20]} />
         <meshLambertMaterial attach="material" color="#444" />
       </mesh>
