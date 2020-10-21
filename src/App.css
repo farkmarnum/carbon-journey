@@ -4,12 +4,12 @@
 
 :root {
   --blue: #2196f3;
-  --roll-result-transition: 250ms;
+  --roll-result-transition: 300ms;
 }
 
 .roll-btn {
   display: block;
-  background: none;
+  background: white;
   outline: none;
   padding: 2rem 3.5rem;
   border-radius: 1rem;
@@ -27,7 +27,7 @@
 
 .sphere-selector-button {
   display: block;
-  background: none;
+  background: white;
   outline: none;
   padding: 0.5rem 1rem;
   border-radius: 1rem;
@@ -36,6 +36,39 @@
   cursor: pointer;
   margin: 1rem 0;
   border: 3px solid black;
+}
+
+.clear-roll-log-button {
+  display: block;
+  background: white;
+  outline: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.875rem;
+  font-weight: bold;
+  cursor: pointer;
+  margin: 1rem auto;
+  border: 2px solid black;
+}
+
+.roll-log-button {
+  color: white;
+  outline: none;
+  padding: 0.5rem 1rem;
+  border-radius: 1rem;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  margin: 0.3rem;
+  border: 3px solid black;
+}
+
+.roll-marker {
+  padding: 0.4rem;
+  border-radius: 1rem;
+  margin: 0.2rem auto;
+  border: 1px solid black;
+  width: 0.6rem;
 }
 
 .sphere-name {
@@ -51,21 +84,30 @@
 .right-side {
   position: fixed;
   top: 2rem;
-  right: 2rem;
+  right: 1.5rem;
   text-align: center;
 }
 
+.left-side {
+  position: fixed;
+  top: 1rem;
+  left: 1.5rem;
+  text-align: center;
+}
+
+.left-side .label,
 .right-side .label {
-  margin: 2rem 0 0.5rem;
+  font-size: 1.25rem;
+  margin: 1.25rem 0 0.5rem;
   font-weight: bold;
 }
 
 .roll-result-overlay {
   position: fixed;
-  top: 30vh;
-  left: 4rem;
-  height: 40vh;
-  width: 40vh;
+  top: calc(50% - 200px);
+  left: calc(50% - 200px);
+  height: 400px;
+  width: 400px;
   transition: opacity var(--roll-result-transition) ease-out;
 }
 

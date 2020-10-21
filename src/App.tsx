@@ -231,7 +231,7 @@ const Cube = ({
         attach="geometry"
         args={[DICE_SIDELENGTH, DICE_SIDELENGTH, DICE_SIDELENGTH]}
       />
-      {textures.map(texture => {
+      {textures.map((texture) => {
         return (
           <meshLambertMaterial
             key={texture.uuid}
@@ -442,12 +442,15 @@ const App = (): JSX.Element => {
     setRollResult(i)
   }
 
-  const hideRollResult = (): void => {
+  const hideRollResult = (t?: number): void => {
     setRollResultClass('hide')
 
-    setTimeout(() => {
-      setRollResult(undefined)
-    }, rollResultTransitionMs)
+    setTimeout(
+      () => {
+        setRollResult(undefined)
+      },
+      t != null ? t : rollResultTransitionMs,
+    )
   }
 
   const rollDice = (): void => {
@@ -467,6 +470,10 @@ const App = (): JSX.Element => {
 
     setCubeState('init')
   }
+
+  const [rollsLog, setRollsLog] = useState<string[]>([])
+  const addRoll = (roll: string): void => setRollsLog([...rollsLog, roll])
+  const clearRolls = (): void => setRollsLog([])
 
   const isValidRollResult =
     rollResult != null && rollResult <= 5 && rollResult >= 0
@@ -501,6 +508,40 @@ const App = (): JSX.Element => {
         )}
       </div>
 
+      <div className="left-side">
+        <div className="label">Click to log rolls:</div>
+        <div>
+          {spheres.map((data) => (
+            <button
+              key={data.name}
+              className="roll-log-button"
+              style={{ backgroundColor: data.color, borderColor: data.color }}
+              onClick={(): void => {
+                addRoll(data.name)
+              }}
+            >
+              {data.name.slice(0, 1).toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <button onClick={clearRolls} className="clear-roll-log-button">
+          Clear roll log
+        </button>
+        <div className="label">Roll log:</div>
+        {rollsLog.map((roll, i) => {
+          const data = spheres.find(({ name }) => name === roll)
+          if (!data) return null
+
+          return (
+            <div
+              key={i}
+              className="roll-marker"
+              style={{ backgroundColor: data.color, borderColor: data.color }}
+            />
+          )
+        })}
+      </div>
+
       <div className="right-side">
         <button className="roll-btn" onClick={(): void => rollDice()}>
           Roll
@@ -512,12 +553,13 @@ const App = (): JSX.Element => {
           <input
             type="checkbox"
             onChange={(evt): void => {
+              hideRollResult(0)
               setIsPostIndustrial(evt.target.checked)
             }}
           />
           <span className="slider round"></span>
         </label>
-        <div className="label">Switch sphere:</div>
+        <div className="label">Switch die:</div>
         {spheres.map((data, i) => (
           <button
             key={data.name}
@@ -525,7 +567,7 @@ const App = (): JSX.Element => {
             style={{ color: data.color, borderColor: data.color }}
             onClick={(): void => {
               setSphereIndex(i)
-              hideRollResult()
+              hideRollResult(0)
             }}
           >
             {data.name}
