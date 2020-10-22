@@ -10,10 +10,11 @@
 
 ## Deploy to GitHub Pages
 
- - follow [these instructions](https://dev.to/yuribenjamin/how-to-deploy-react-app-in-github-pages-2a1f) to set up GitHub Pages. Then:
+ - Follow [these instructions](https://dev.to/yuribenjamin/how-to-deploy-react-app-in-github-pages-2a1f) to set up GitHub Pages.
+ - Once that's complete:
 
+        npm run deploy
 
-    npm run deploy
 
 ## TODO:
 
