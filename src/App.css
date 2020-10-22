@@ -69,6 +69,8 @@
   margin: 0.2rem auto;
   border: 1px solid black;
   width: 0.6rem;
+  display: inline-block;
+  float: left;
 }
 
 .sphere-name {
@@ -93,6 +95,7 @@
   top: 1rem;
   left: 1.5rem;
   text-align: center;
+  width: 250px;
 }
 
 .left-side .label,
